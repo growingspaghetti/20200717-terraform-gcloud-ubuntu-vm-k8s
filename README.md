@@ -1,11 +1,16 @@
-This README provides the instruction to set up kuberentes in a gcloud n1-standard-1 ubuntu instance.
+In Februrary 2020, I created a gist instruction to set up minikube [here](https://gist.github.com/growingspaghetti/c7810d40f5d1ca91ae75a697e40adb35). Instead, this README provides the instruction to set up kuberentes (kubeadm) in a gcloud n1-standard-1 ubuntu instance.
 
-# gcloud new project
+# Table of Contents
+[Table of Contents](#table-of-contents), [Create a gcloud new project](#create-a-gcloud-new-project), [Ubuntu vm setup (terraform)](#ubuntu-vm-setup-terraform), [Terraform](#terraform), [Install kubeadm in the Ubuntu vm](#install-kubeadm-in-the-ubuntu-vm), [Init kubeadm](#init-kubeadm), [Install flannel network fabricator](#install-flannel-network-fabricator), [Install kubernetes Dashboard](#install-kubernetes-dashboard), [Login the kubernetes dashboard from the kubectl in your laptop](#login-the-kubernetes-dashboard-from-the-kubectl-in-your-laptop)
+
+# Create a gcloud new project
 ![](./img/gcloud-new-project.png)
 
-# ubuntu vm setup (terraform)
-![](./img/vscode-settings.png)
+# Ubuntu vm setup (terraform)
 settings.json vscode
+
+![](./img/vscode-settings.png)
+
 ```
 	"[hcl]": {
 		"editor.tabSize": 2
@@ -27,6 +32,10 @@ Create a json key.
 ![](./img/gcloud-enable-compute-engine-api.png)
 
 Enable compute engine api.
+
+[Back to Table of Contents](#table-of-contents)
+
+## Terraform
 
 <pre><font color="#A6E22E"><b>ryoji@ubuntu</b></font>:<font color="#66D9EF"><b>/media/local/bin</b></font>$ wget https://releases.hashicorp.com/terraform/0.12.28/terraform_0.12.28_linux_amd64.zip
 <font color="#A6E22E"><b>ryoji@ubuntu</b></font>:<font color="#66D9EF"><b>/media/local/bin</b></font>$ unzip terraform_0.12.28_linux_amd64.zip 
@@ -281,7 +290,9 @@ References:
  - https://www.terraform.io/docs/providers/google/r/compute_instance.html
  - https://docs.projectcalico.org/getting-started/kubernetes/self-managed-public-cloud/gce
 
-# install kubeadm in the ubuntu vm
+[Back to Table of Contents](#table-of-contents)
+
+# Install kubeadm in the Ubuntu vm
 
 <pre><font color="#A6E22E"><b>ryoji@ubuntu</b></font>:<font color="#66D9EF"><b>/media/VirtualBox VMs/vm-k8s</b></font>$ ssh ryoji@35.228.189.126
 Welcome to Ubuntu 20.04 LTS (GNU/Linux 5.4.0-1019-gcp x86_64)
@@ -339,7 +350,9 @@ kubeadm set on hold.
 kubectl set on hold.
 </pre>
 
-## init kubeadm
+[Back to Table of Contents](#table-of-contents)
+
+## Init kubeadm
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ sudo kubeadm init --pod-network-cidr=10.244.0.0/16
 W0717 18:02:27.766223   17123 configset.go:202] WARNING: kubeadm cannot validate component configs for API groups [kubelet.config.k8s.io kubeproxy.config.k8s.io]
 [init] Using Kubernetes version: v1.18.6
@@ -462,9 +475,11 @@ ExecStart=/usr/bin/kubelet $KUBELET_KUBECONFIG_ARGS $KUBELET_CONFIG_ARGS $KUBELE
 <font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ Connection to 35.228.189.126 closed by remote host.
 Connection to 35.228.189.126 closed.</pre>
 
-----
+[Back to Table of Contents](#table-of-contents)
 
-Install flannel network fabricator. https://github.com/coreos/flannel
+## Install flannel network fabricator
+
+https://github.com/coreos/flannel
 
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ sudo systemctl status kubelet
 <font color="#A6E22E"><b>●</b></font> kubelet.service - kubelet: The Kubernetes Node Agent
@@ -510,9 +525,9 @@ primary-node   Ready    master   12m   v1.18.6</pre>
 To further debug and diagnose cluster problems, use &apos;kubectl cluster-info dump&apos;.
 </pre>
 
-----
+[Back to Table of Contents](#table-of-contents)
 
-Install dashboard.
+## Install kubernetes Dashboard
 
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/v2.0.0/aio/deploy/recommended.yaml
 namespace/kubernetes-dashboard created
@@ -588,8 +603,6 @@ kubernetes-dashboard   kubernetes-dashboard-7b544877d5-sqkcv        1/1     Runn
 pod &quot;kubernetes-dashboard-7b544877d5-sqkcv&quot; deleted
 </pre>
 
-----
-
 Now you are supposed to log in kubernetes dashabord with this kubernetes-dashboard-token.
 
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl get secrets -n kubernetes-dashboard
@@ -614,7 +627,9 @@ ca.crt:     1025 bytes
 namespace:  20 bytes
 token:      eyJhbGciOiJSUzI1NiIsImtpZCI6ImptR3c3TFJrSmlsbDNIdzZYc2ZQRWdyX....</pre>
 
-## connect to kubernetes dashboard from the kubectl in your laptop
+[Back to Table of Contents](#table-of-contents)
+
+## Login the kubernetes dashboard from the kubectl in your laptop
 
 Get .kube/config of the newly created k8s cluster.
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat .kube/config 
@@ -670,9 +685,9 @@ Log in to the dashboard
 
 http://localhost:8001/api/v1/namespaces/kubernetes-dashboard/services/https:kubernetes-dashboard:/proxy/#/login
 
-![](./k8s-dashboard.png)
+![](./img/k8s-dashboard.png)
 
-![](./k8s-htop.png)
+![](./img/k8s-htop.png)
 
 Useful command:
 <pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl get role,rolebinding -n kubernetes-dashboard
@@ -680,5 +695,6 @@ NAME                                                  CREATED AT
 role.rbac.authorization.k8s.io/kubernetes-dashboard   2020-07-17T18:19:14Z
 
 NAME                                                         ROLE                        AGE
-rolebinding.rbac.authorization.k8s.io/kubernetes-dashboard   Role/kubernetes-dashboard   27m
-<font color="#A6E22E"><b>ryo</b></font></pre>
+rolebinding.rbac.authorization.k8s.io/kubernetes-dashboard   Role/kubernetes-dashboard   27m</pre>
+
+[Back to Table of Contents](#table-of-contents)

@@ -83,6 +83,6 @@ resource "google_compute_instance" "primary_node" {
 
   metadata = {
     block-project-ssh-keys = "true"
-    sshKeys                = file("~/.ssh/id_rsa.pub")
+    sshKeys                = "ryoji:${file("~/.ssh/id_rsa.pub")}"
   }
 }
