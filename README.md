@@ -1,7 +1,13 @@
-In Februrary 2020, I created a gist instruction to set up minikube [here](https://gist.github.com/growingspaghetti/c7810d40f5d1ca91ae75a697e40adb35). Instead, this README provides the instruction to set up kuberentes (kubeadm) in a gcloud n1-standard-1 ubuntu instance.
+In Februrary 2020, I created a gist instruction to set up minikube [here](https://gist.github.com/growingspaghetti/c7810d40f5d1ca91ae75a697e40adb35).
+
+Instead, this README provides the instruction to set up kuberentes (kubeadm) in a gcloud n1-standard-1 ubuntu instance.
+
+As a bonus stage, I also added the instruction to register Go apps to dockerhub and deploy them with Metallb, nginx-ingress and the persistant volume claims.
 
 # Table of Contents
 [Table of Contents](#table-of-contents), [Create a gcloud new project](#create-a-gcloud-new-project), [Ubuntu vm setup (terraform)](#ubuntu-vm-setup-terraform), [Terraform](#terraform), [Install kubeadm in the Ubuntu vm](#install-kubeadm-in-the-ubuntu-vm), [Init kubeadm](#init-kubeadm), [Install flannel network fabricator](#install-flannel-network-fabricator), [Install kubernetes Dashboard](#install-kubernetes-dashboard), [Login the kubernetes dashboard from the kubectl in your laptop](#login-the-kubernetes-dashboard-from-the-kubectl-in-your-laptop)
+
+[Deploy my golang apps](#deploy-my-golang-apps), [Register my golang apps to DockerHub](#register-my-golang-apps-to-dockerhub), [Metallb](#metallb), [Reduce CPU request](#reduce-cpu-request), [Nginx-ingress](#nginx-ingress)
 
 # Create a gcloud new project
 ![](./img/gcloud-new-project.png)
@@ -696,5 +702,157 @@ role.rbac.authorization.k8s.io/kubernetes-dashboard   2020-07-17T18:19:14Z
 
 NAME                                                         ROLE                        AGE
 rolebinding.rbac.authorization.k8s.io/kubernetes-dashboard   Role/kubernetes-dashboard   27m</pre>
+
+[Back to Table of Contents](#table-of-contents)
+
+# Deploy my golang apps
+
+In January 2019, I created tiny-tiny a golang app to scrape the Japanese yahoo news and another one to read those scraped articles. I re-use them this time.
+
+ 1. https://github.com/growingspaghetti/20190220-ynews/tree/master/golang/scraper/sqlite -> kubernetes Job
+ 2. https://github.com/growingspaghetti/20190220-ynews/tree/master/golang/viewer/sqlite -> kubernetes Service
+
+[Back to Table of Contents](#table-of-contents)
+
+## Register my golang apps to DockerHub
+
+![](./img/dockerhub-create-repository.png)
+
+Create a repository.
+
+![](./img/dockerhub-link-account.png)
+
+Link github account.
+
+![](./img/dockerhub-ci-build.png)
+
+Edit build configuration with the correct path of Dockerfile.
+
+![](./img/dockerhub-mini-ci-build.png)
+
+Here a mini CI is working.
+
+ - https://hub.docker.com/r/ryojikodakari/ynews-mini-scraper-20200718
+ - https://hub.docker.com/r/ryojikodakari/ynews-mini-viewer-20200718
+
+[Back to Table of Contents](#table-of-contents)
+
+# Metallb
+
+Reference:
+ - https://metallb.universe.tf/installation/
+
+First, reduce the CPU request (below).
+
+```
+kubectl taint nodes --all node-role.kubernetes.io/master-
+
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+sed -e "s/strictARP: false/strictARP: true/" | \
+kubectl diff -f - -n kube-system
+
+kubectl get configmap kube-proxy -n kube-system -o yaml | \
+sed -e "s/strictARP: false/strictARP: true/" | \
+kubectl apply -f - -n kube-system
+
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/namespace.yaml
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.9.3/manifests/metallb.yaml
+kubectl create secret generic -n metallb-system memberlist --from-literal=secretkey="$(openssl rand -base64 128)"
+```
+
+Set the external IP address of this Ubuntu VM.
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat metallb-layer2-config.yaml 
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: my-ip-space
+      protocol: layer2
+      addresses:
+      - 35.228.189.126/32
+</pre>
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl apply -f metallb-layer2-config.yaml
+configmap/config created
+</pre>
+
+[Back to Table of Contents](#table-of-contents)
+
+### Reduce CPU request
+
+![](./img/cpu-request.png)
+
+With this instruction, CPU request seems to be 95% and needs to be reduced.
+
+![](./img/kube-system.png)
+
+In kube-system, modify ReplicaSetS, DaemonSets and Deployment, reduce the desired pot number from 2 to 1. Set request CPU to be 25m.
+```
+spec:
+      containers:
+          resources:
+            limits:
+              cpu: 100m
+              memory: 50Mi
+            requests:
+              cpu: 25m
+              memory: 10Mi
+```
+
+[Back to Table of Contents](#table-of-contents)
+
+# Nginx-ingress
+
+References:
+ - https://github.com/kubernetes/ingress-nginx/blob/master/docs/deploy/baremetal.md
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v0.34.1/deploy/static/provider/baremetal/deploy.yaml
+namespace/ingress-nginx created
+serviceaccount/ingress-nginx created
+configmap/ingress-nginx-controller created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx created
+role.rbac.authorization.k8s.io/ingress-nginx created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx created
+service/ingress-nginx-controller-admission created
+service/ingress-nginx-controller created
+deployment.apps/ingress-nginx-controller created
+validatingwebhookconfiguration.admissionregistration.k8s.io/ingress-nginx-admission created
+clusterrole.rbac.authorization.k8s.io/ingress-nginx-admission created
+clusterrolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+job.batch/ingress-nginx-admission-create created
+job.batch/ingress-nginx-admission-patch created
+role.rbac.authorization.k8s.io/ingress-nginx-admission created
+rolebinding.rbac.authorization.k8s.io/ingress-nginx-admission created
+serviceaccount/ingress-nginx-admission created
+</pre>
+
+![](./img/nginx-ingress-loadbalancer.png)
+
+Change type from NodePort to LoadBalancer.
+
+![](./img/service-external-endpoint.png)
+
+Then you can see Exeternal Endpoints are set with your Ubuntu VM external IP address.
+
+![](./img/ingress-host-network.png)
+
+To bind this single node to nginx-ingress, add this:
+
+```
+hostNetwork: true
+```
+
+![](./img/http-https-firewall-rule.png)
+
+In GCP, add another firewall rule for :80 and :443.
+
+![](./img/bad-request.png)
+
+Then now, nginx->metallb->kubernetes-cluster is routed.
 
 [Back to Table of Contents](#table-of-contents)
