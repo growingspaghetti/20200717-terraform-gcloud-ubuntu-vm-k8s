@@ -1027,6 +1027,12 @@ spec:
 
 ![](./img/k8s-ynews.png)
 
-http://35.228.189.126/ u:ryoji p:k8s
+https://35.228.189.126/ u:ryoji p:k8s
 
 [Back to Table of Contents](#table-of-contents)
+
+# P.S.
+
+![](./img/78-percent.png)
+
+78.5% 💦
