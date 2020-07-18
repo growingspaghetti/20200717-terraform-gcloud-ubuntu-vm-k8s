@@ -1,13 +1,13 @@
 In Februrary 2020, I created a gist instruction to set up minikube [here](https://gist.github.com/growingspaghetti/c7810d40f5d1ca91ae75a697e40adb35).
 
-Instead, this README provides the instruction to set up kuberentes (kubeadm) in a gcloud n1-standard-1 ubuntu instance.
+Instead, this README provides the instruction to set up kuberentes (**kubeadm**) in a gcloud n1-standard-1 ubuntu instance.
 
-As a bonus stage, I also added the instruction to register Go apps to dockerhub and deploy them with Metallb, nginx-ingress and the persistant volume claims.
+As a bonus stage, I also added the instruction to register Go apps to **dockerhub** and deploy them with **Metallb**, **nginx-ingress** and the persistant volume claims.
 
 # Table of Contents
 [Table of Contents](#table-of-contents), [Create a gcloud new project](#create-a-gcloud-new-project), [Ubuntu vm setup (terraform)](#ubuntu-vm-setup-terraform), [Terraform](#terraform), [Install kubeadm in the Ubuntu vm](#install-kubeadm-in-the-ubuntu-vm), [Init kubeadm](#init-kubeadm), [Install flannel network fabricator](#install-flannel-network-fabricator), [Install kubernetes Dashboard](#install-kubernetes-dashboard), [Login the kubernetes dashboard from the kubectl in your laptop](#login-the-kubernetes-dashboard-from-the-kubectl-in-your-laptop)
 
-[Deploy my golang apps](#deploy-my-golang-apps), [Register my golang apps to DockerHub](#register-my-golang-apps-to-dockerhub), [Metallb](#metallb), [Reduce CPU request](#reduce-cpu-request), [Nginx-ingress](#nginx-ingress)
+[Deploy my golang apps](#deploy-my-golang-apps), [Register my golang apps to DockerHub](#register-my-golang-apps-to-dockerhub), [Metallb host IP](#metallb-host-ip), [Reduce CPU request](#reduce-cpu-request), [Nginx-ingress reverse proxy](#nginx-ingress-reverse-proxy), [Final deployment with pvc](#final-deployment-with-pvc)
 
 # Create a gcloud new project
 ![](./img/gcloud-new-project.png)
@@ -709,7 +709,7 @@ rolebinding.rbac.authorization.k8s.io/kubernetes-dashboard   Role/kubernetes-das
 
 In January 2019, I created tiny-tiny a golang app to scrape the Japanese yahoo news and another one to read those scraped articles. I re-use them this time.
 
- 1. https://github.com/growingspaghetti/20190220-ynews/tree/master/golang/scraper/sqlite -> kubernetes Job
+ 1. https://github.com/growingspaghetti/20190220-ynews/tree/master/golang/scraper/sqlite -> kubernetes CronJob
  2. https://github.com/growingspaghetti/20190220-ynews/tree/master/golang/viewer/sqlite -> kubernetes Service
 
 [Back to Table of Contents](#table-of-contents)
@@ -737,7 +737,7 @@ Here a mini CI is working.
 
 [Back to Table of Contents](#table-of-contents)
 
-# Metallb
+# Metallb host IP
 
 Reference:
  - https://metallb.universe.tf/installation/
@@ -790,7 +790,7 @@ With this instruction, CPU request seems to be 95% and needs to be reduced.
 
 ![](./img/kube-system.png)
 
-In kube-system, modify ReplicaSetS, DaemonSets and Deployment, reduce the desired pot number from 2 to 1. Set request CPU to be 25m.
+In kube-system, modify ReplicaSets, DaemonSets and Deployment, reduce the desired pot number from 2 to 1. Set request CPU to be 25m.
 ```
 spec:
       containers:
@@ -805,7 +805,7 @@ spec:
 
 [Back to Table of Contents](#table-of-contents)
 
-# Nginx-ingress
+# Nginx-ingress reverse proxy
 
 References:
  - https://github.com/kubernetes/ingress-nginx/blob/master/docs/deploy/baremetal.md
@@ -854,5 +854,179 @@ In GCP, add another firewall rule for :80 and :443.
 ![](./img/bad-request.png)
 
 Then now, nginx->metallb->kubernetes-cluster is routed.
+
+[Back to Table of Contents](#table-of-contents)
+
+# Final deployment with pvc
+
+References:
+ - https://kubernetes.github.io/ingress-nginx/examples/auth/basic/
+
+Create /mnt/data directory with 1000:1000.
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>/mnt/data</b></font>$ cd ..
+<font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>/mnt</b></font>$ sudo chown -R 1000:1000 data
+<font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>/mnt</b></font>$ cd data
+<font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>/mnt/data</b></font>$ ls -la
+total 8
+drwxr-xr-x 2 ubuntu ubuntu 4096 Jul 18 07:42 <font color="#66D9EF"><b>.</b></font>
+drwxr-xr-x 3 root   root   4096 Jul 18 07:42 <font color="#66D9EF"><b>..</b></font>
+</pre>
+
+![](./img/pod.png)
+
+![](./img/mounted-file-system.png)
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat pv.yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ynews-mini-pv
+  labels:
+    type: local
+spec:
+  storageClassName: manual
+  capacity:
+    storage: 0.5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+</pre>
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat pv-claim.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ynews-mini-pv-claim
+spec:
+  storageClassName: manual
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 0.4Gi
+</pre>
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat cron.yaml 
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: ynews-mini-scraper-20200718
+spec:
+  schedule: "0 12 */5 * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          volumes:
+            - name: claim-volume
+              persistentVolumeClaim:
+                claimName: ynews-mini-pv-claim
+          containers:
+          - name: ynews-mini-scraper-20200718
+            image: ryojikodakari/ynews-mini-scraper-20200718
+            args: ["https://headlines.yahoo.co.jp/list/?m=kyodonews"]
+            volumeMounts:
+              - mountPath: "/app/data"
+                name: claim-volume
+            securityContext:
+              runAsUser: 1000
+              runAsGroup: 1000
+            resources:
+              requests:
+                cpu: 10m
+          restartPolicy: OnFailure
+</pre>
+(Fetching 10 articles every 5 days is just enough for this purpose.)
+
+----
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat deploy.yaml 
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ynews-mini-viewer-20200718
+  labels:
+    app: ynews-mini-viewer-20200718
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ynews-mini-viewer-20200718
+  template:
+    metadata:
+      labels:
+        app: ynews-mini-viewer-20200718
+    spec:
+      volumes:
+        - name: claim-volume
+          persistentVolumeClaim:
+            claimName: ynews-mini-pv-claim
+      containers:
+      - name: ynews-mini-viewer-20200718
+        image: ryojikodakari/ynews-mini-viewer-20200718
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+          - mountPath: &quot;/app/data&quot;
+            name: claim-volume
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+        resources:
+          requests:
+            cpu: 10m
+</pre>
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat service.yaml 
+apiVersion: v1
+kind: Service
+metadata:
+  name: ynews-mini-viewer-20200718
+spec:
+  selector:
+    app: ynews-mini-viewer-20200718
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8080
+</pre>
+
+Create a secret.
+
+<pre><font color="#A6E22E"><b>ryoji@ubuntu</b></font>:<font color="#66D9EF"><b>~</b></font>$ htpasswd -c auth ryoji
+New password: 
+Re-type new password: 
+Adding password for user ryoji
+<font color="#A6E22E"><b>ryoji@ubuntu</b></font>:<font color="#66D9EF"><b>~</b></font>$ kubectl --insecure-skip-tls-verify create secret generic basic-auth --from-file=auth
+secret/basic-auth created</pre>
+
+<pre><font color="#A6E22E"><b>ryoji@primary-node</b></font>:<font color="#66D9EF"><b>~</b></font>$ cat ingress.yaml 
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: ynews-mini-viewer-20200718
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: &quot;true&quot;
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: &apos;Authentication Required&apos;
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: ynews-mini-viewer-20200718
+          servicePort: 80
+</pre>
+
+![](./img/basic.png)
+
+![](./img/k8s-ynews.png)
+
+http://35.228.189.126/ u:ryoji p:k8s
 
 [Back to Table of Contents](#table-of-contents)
